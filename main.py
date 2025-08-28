@@ -1,6 +1,7 @@
 import os
 import re
 from lxml import etree
+## from OldHangeul import OldTexts ##
 
 BASE_DIR = "세종 한글 고전"       # 원본 XML 폴더 -> 이 main.py랑 같은곳에 있으면 파일이름만 적어주세용
 OUTPUT_DIR = "세종 한글 고전 txt" # 결과 TXT 폴더      아 맞다 그리고 세종 한글 고전 txt 파일은 사전에 만들지 않아도 main.py 있는곳에 같이 생겨요
@@ -114,7 +115,3 @@ for idx, xml_path in enumerate(total_files, 1):
         print(f"⚠️ 오류: {xml_path} → {e}")
     if idx % 10 == 0 or idx == len(total_files):
         print(f"[진행상황] {idx}/{len(total_files)} 완료")
-
-
-################################# 옛한글 깨지는 문제 해결할 것 #######################################
-############################## Oldhangeul로 해결하자 ㄱㄱㄱㄱㄱ #####################################
