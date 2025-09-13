@@ -1,10 +1,40 @@
 import os
 import re
+import sys
 from lxml import etree
-## from OldHangeul import OldTexts ##
+# OldHangeul 라이브러리에서 hNFD 함수를 가져옵니다.
+# 라이브러리가 설치되어 있지 않다면, 터미널(명령 프롬프트)에서 먼저 설치해주세요.
+# pip install OldHangeul
+from OldHangeul import hNFD
 
-BASE_DIR = "세종 한글 고전"       # 원본 XML 폴더 -> 이 main.py랑 같은곳에 있으면 파일이름만 적어주세용
-OUTPUT_DIR = "세종 한글 고전 txt" # 결과 TXT 폴더      아 맞다 그리고 세종 한글 고전 txt 파일은 사전에 만들지 않아도 main.py 있는곳에 같이 생겨요
+# 스크립트가 어디서 실행되든, 스크립트 파일 기준 상대 경로 사용
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(SCRIPT_DIR, "세종 한글 고전 xml")  # 원본 XML 폴더
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "세종 한글 고전 txt")  # 결과 TXT 폴더
+
+# 입력 폴더 존재 확인 (없으면 안내 후 종료)
+if not os.path.isdir(BASE_DIR):
+    # 콘솔 인코딩 이슈 대비 안전 출력
+    enc = (getattr(sys.stdout, "encoding", None) or "utf-8")
+    msg1 = f"입력 폴더를 찾을 수 없습니다: {BASE_DIR}"
+    msg2 = "실제 폴더 경로를 확인하거나 스크립트를 해당 폴더가 있는 위치에서 실행하세요."
+    try:
+        print(msg1)
+        print(msg2)
+    except UnicodeEncodeError:
+        print(msg1.encode(enc, "replace").decode(enc, "replace"))
+        print(msg2.encode(enc, "replace").decode(enc, "replace"))
+    exit(0)
+
+
+# 안전 출력 함수 (Windows cp949 콘솔 등에서의 깨짐 방지)
+def safe_print(message: str) -> None:
+    enc = (getattr(sys.stdout, "encoding", None) or "utf-8")
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        print(message.encode(enc, "replace").decode(enc, "replace"))
+
 
 def extract_years(date_elements):
     """출판일 태그 여러 개에서 연도만 추출 (2000년 이상은 무시).
@@ -21,6 +51,7 @@ def extract_years(date_elements):
                 years.append(y)
     return years
 
+
 def get_period_from_xml(root):
     """XML에서 올바른 연도를 추출하여 시기 구분"""
     출판일_elems = root.findall(".//출판일")
@@ -30,8 +61,9 @@ def get_period_from_xml(root):
     year = min(years)  # 가장 오래된 연도를 선택
     return "중세국어" if year <= 1592 else "근대국어"
 
+
 def get_full_text(element):
-    """태그 안의 모든 텍스트 추출 (단, <원본위치>는 태그ごと 제거)"""
+    """태그 안의 모든 텍스트 추출 후 첫가끝 코드로 변환 (단, <원본위치>는 태그ごと 제거)"""
     for pos in element.findall(".//원본위치"):
         parent = pos.getparent()
         if pos.tail:  # 원본위치 뒤에 붙은 실제 텍스트 보존
@@ -42,7 +74,15 @@ def get_full_text(element):
                 parent.text = (parent.text or "") + pos.tail
         parent.remove(pos)  # 태그 삭제
 
-    return etree.tostring(element, method="text", encoding="utf-8").decode("utf-8").strip()
+    # 1. 태그 내의 모든 텍스트를 추출합니다.
+    original_text = etree.tostring(element, method="text", encoding="utf-8").decode("utf-8").strip()
+
+    # 2. 추출된 텍스트를 hNFD 함수를 이용해 첫가끝 코드로 변환합니다.
+    converted_text = hNFD(original_text)
+
+    # 3. 변환된 텍스트를 반환합니다.
+    return converted_text
+
 
 def process_xml(xml_path, rel_path):
     # 원본 읽기
@@ -72,11 +112,13 @@ def process_xml(xml_path, rel_path):
         번역문들 = 기사.findall(".//번역문")
 
         for 원문 in 원문들:
+            # get_full_text 함수가 이제 변환된 텍스트를 반환합니다.
             text = get_full_text(원문)
             if text:
                 lines_언해.append(text)
 
         for 번역문 in 번역문들:
+            # get_full_text 함수가 이제 변환된 텍스트를 반환합니다.
             text = get_full_text(번역문)
             if text:
                 lines_번역문.append(text)
@@ -96,7 +138,8 @@ def process_xml(xml_path, rel_path):
         with open(txt_path_번역문, "w", encoding="utf-8") as f:
             f.write("\n\n".join(lines_번역문))
 
-    print(f"{rel_path} → {period} 변환 완료")
+    safe_print(f"{rel_path} -> {period} 변환 완료")
+
 
 # 전체 xml 순회 + 진행상황 표시
 total_files = []
@@ -105,13 +148,14 @@ for root_dir, _, files in os.walk(BASE_DIR):
         if file.endswith(".xml"):
             total_files.append(os.path.join(root_dir, file))
 
-print(f"총 {len(total_files)}개 XML 파일 처리 시작...")
+safe_print(f"총 {len(total_files)}개 XML 파일 처리 시작...")
 
 for idx, xml_path in enumerate(total_files, 1):
     rel_path = os.path.relpath(xml_path, BASE_DIR)
     try:
         process_xml(xml_path, rel_path)
     except Exception as e:
-        print(f"⚠️ 오류: {xml_path} → {e}")
+        safe_print(f"오류: {xml_path} -> {e}")
     if idx % 10 == 0 or idx == len(total_files):
-        print(f"[진행상황] {idx}/{len(total_files)} 완료")
+        safe_print(f"[진행상황] {idx}/{len(total_files)} 완료")
+
